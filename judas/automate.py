@@ -17,6 +17,7 @@ from sklearn.model_selection import cross_val_score
 from .regression.automate import Judas as JudasRegressor
 from .classification.automate import Judas as JudasClassifier
 
+class General():
 
     def __init__(self, DEBUG=False):
         self.DEBUG=DEBUG
