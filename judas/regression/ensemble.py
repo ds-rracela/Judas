@@ -5,33 +5,48 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
 from .utils import progressbar
+from tqdm.autonotebook import tqdm
 
 class TrainDecisionTree():
 
-    #maxdepth_settings = range(1, 20) # try n_neighbors from 1 to 50
+    maxdepth_settings = range(1, 20)
+    var = maxdepth_settings
+    varname = 'maxdepth'
 
-    def __init__(self, X, y, Number_trials, maxdepth_settings=range(1, 20)):
-        self.maxdepth_settings = maxdepth_settings
-        lahat_training = pd.DataFrame()
-        lahat_test = pd.DataFrame()
+    def __init__(self, X, y, Number_trials, maxdepth_settings=None,scaler=None):
+        score_train = []
+        score_test = []
+        if maxdepth_settings is not None:
+            self.maxdepth_settings = maxdepth_settings
+            self.var = maxdepth_settings
 
-        for seedN in progressbar(range(1,Number_trials+1,1), 'Computing: ', 'Seed'):
-            X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.25, random_state=seedN)
+        with tqdm(total=Number_trials*len(self.maxdepth_settings)) as pb:
+            for seed in range(1,Number_trials+1,1):
+                X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.25, random_state=seed)
+                if scaler is not None:
+                    scaler_inst = scaler.fit(X_train)
+                    X_train = scaler_inst.transform(X_train)
+                    X_test = scaler_inst.transform(X_test)
+                pb.set_description(f'Trial: {seed}')
+                training_accuracy = []
+                test_accuracy = []
 
-            training_accuracy = []
-            test_accuracy = []
-
-            for depth in maxdepth_settings:   
-                tree = DecisionTreeRegressor(max_depth=depth, random_state=42)  # build the model
-                tree.fit(X_train, y_train)
-
-                training_accuracy.append(tree.score(X_train, y_train)) # record training set accuracy
-                test_accuracy.append(tree.score(X_test, y_test))   # record generalization accuracy
-
-            lahat_training[seedN]=training_accuracy
-            lahat_test[seedN] = test_accuracy
+                for depth in maxdepth_settings:   
+                    tree = DecisionTreeRegressor(max_depth=depth, random_state=42)  # build the model
+                    tree.fit(X_train, y_train)
+    
+                    training_accuracy.append(tree.score(X_train, y_train)) # record training set accuracy
+                    test_accuracy.append(tree.score(X_test, y_test))   # record generalization accuracy
+                    pb.update(1)
+    
+                score_train.append(training_accuracy)
+                score_test.append(test_accuracy)
                 
-        self.score = np.mean(lahat_test.values, axis=1)      
+        self.score = np.mean(score_test, axis=0) 
+        print(self.score)
+        self.sc_train = np.mean(score_train, axis=0)
+        self.std_score = np.std(score_test, axis=0)
+        self.std_train = np.std(score_train, axis=0)
 
         # get top predictor
         best_depth = maxdepth_settings[np.argmax(self.score)]
@@ -49,28 +64,43 @@ class TrainDecisionTree():
 
 class TrainRandomForest():
     # n_estimators_settings = range(1, 20) # try n_neighbors from 1 to 50
+    n_estimators_settings = range(1, 20)
+    var = n_estimators_settings
+    varname = 'n_estimators'
 
-    def __init__(self,X,y, Number_trials, n_estimators_settings=range(1,20)):
-
+    def __init__(self,X,y, Number_trials, n_estimators_settings=range(1,20),scaler=None):
         self.n_estimators_settings = n_estimators_settings
-        lahat_training = pd.DataFrame()
-        lahat_test = pd.DataFrame()
-        for seedN in progressbar(range(1,Number_trials+1,1), 'Computing: ', 'Seed'):
-            X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.25, random_state=seedN)
-
-            training_accuracy = []
-            test_accuracy = []
+        score_train = []
+        score_test = []
+        if n_estimators_settings is not None:
+            self.n_estimators_settings = n_estimators_settings
+            self.var = n_estimators_settings
             
-            for estimator in n_estimators_settings:   
-                forest = RandomForestRegressor(n_estimators=estimator, random_state=0, max_features='auto')
-                forest.fit(X_train, y_train)
-                training_accuracy.append(forest.score(X_train, y_train)) # record training set accuracy
-                test_accuracy.append(forest.score(X_test, y_test))   # record generalization accuracy
+        with tqdm(total=Number_trials*len(self.n_estimators_settings)) as pb:    
+            for seed in range(1,Number_trials+1,1):
+                X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.25, random_state=seed)
+                if scaler is not None:
+                    scaler_inst = scaler.fit(X_train)
+                    X_train = scaler_inst.transform(X_train)
+                    X_test = scaler_inst.transform(X_test)
+                pb.set_description(f'Trial: {seed}')
+                training_accuracy = []
+                test_accuracy = []
+            
+                for estimator in n_estimators_settings:   
+                    forest = RandomForestRegressor(n_estimators=estimator, random_state=0, max_features='auto')
+                    forest.fit(X_train, y_train)
+                    training_accuracy.append(forest.score(X_train, y_train)) # record training set accuracy
+                    test_accuracy.append(forest.score(X_test, y_test))   # record generalization accuracy
+                    pb.update(1)
 
-            lahat_training[seedN]=training_accuracy
-            lahat_test[seedN] = test_accuracy
+                score_train.append(training_accuracy)
+                score_test.append(test_accuracy)
         
-        self.score = np.mean(lahat_test.values, axis=1)
+        self.score = np.mean(score_test, axis=0) 
+        self.sc_train = np.mean(score_train, axis=0)
+        self.std_score = np.std(score_test, axis=0)
+        self.std_train = np.std(score_train, axis=0)
 
         # get top predictor
         best_estimator = n_estimators_settings[np.argmax(self.score)]
@@ -78,6 +108,7 @@ class TrainRandomForest():
         forest.fit(X_train, y_train)
         self.top_predictor = X.columns[np.argmax(forest.feature_importances_)]
         #self.top_predictor='NA'
+        return
 
     def result(self):
         return ['Random Forest', '{:.2%}'.format(np.amax(self.score)), \
@@ -85,31 +116,44 @@ class TrainRandomForest():
 
 class TrainGBM():
 
-    # maxdepth_settings = range(1, 10) # try n_neighbors from 1 to 50
-
-    def __init__(self,X,y, Number_trials, maxdepth_settings=range(1, 10)):
-
-        self.maxdepth_settings=maxdepth_settings
-        lahat_training = pd.DataFrame()
-        lahat_test = pd.DataFrame()
-        for seedN in progressbar(range(1,Number_trials+1,1), 'Computing: ', 'Seed'):
-            X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.25, random_state=seedN)
-
-            training_accuracy = []
-            test_accuracy = []
-
-            for depth in maxdepth_settings:   
-
-                gbrt = GradientBoostingRegressor(max_depth=depth, learning_rate=0.01, random_state=0)  # build the model
-                gbrt.fit(X_train, y_train)
-
-                training_accuracy.append(gbrt.score(X_train, y_train)) # record training set accuracy
-                test_accuracy.append(gbrt.score(X_test, y_test))   # record generalization accuracy
-
-            lahat_training[seedN]=training_accuracy
-            lahat_test[seedN] = test_accuracy
+    maxdepth_settings = range(1, 10)
+    var = maxdepth_settings
+    varname = 'maxdepth'
+    
+    def __init__(self,X,y, Number_trials, maxdepth_settings=None,scaler=None):
+        score_train = []
+        score_test = []
+        if maxdepth_settings is not None:
+            self.maxdepth_settings = maxdepth_settings
+            self.var = maxdepth_settings
             
-        self.score = np.mean(lahat_test.values, axis=1)
+        with tqdm(total=Number_trials*len(self.maxdepth_settings)) as pb:
+            for seed in range(1,Number_trials+1,1):
+                X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.25, random_state=seed)
+                if scaler is not None:
+                    scaler_inst = scaler.fit(X_train)
+                    X_train = scaler_inst.transform(X_train)
+                    X_test = scaler_inst.transform(X_test)
+                pb.set_description(f'Trial: {seed}')
+                training_accuracy = []
+                test_accuracy = []
+
+                for depth in maxdepth_settings:   
+
+                    gbrt = GradientBoostingRegressor(max_depth=depth, learning_rate=0.01, random_state=0)  # build the model
+                    gbrt.fit(X_train, y_train)
+
+                    training_accuracy.append(gbrt.score(X_train, y_train)) # record training set accuracy
+                    test_accuracy.append(gbrt.score(X_test, y_test))   # record generalization accuracy
+                    pb.update(1)
+                    
+                score_train.append(training_accuracy)
+                score_test.append(test_accuracy)
+                
+        self.score = np.mean(score_test, axis=0) 
+        self.sc_train = np.mean(score_train, axis=0)
+        self.std_score = np.std(score_test, axis=0)
+        self.std_train = np.std(score_train, axis=0)
 
         # get top predictor
         best_depth = maxdepth_settings[np.argmax(self.score)]

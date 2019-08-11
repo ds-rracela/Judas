@@ -3,11 +3,16 @@ from datetime import timedelta
 import pandas as pd
 import numpy as np
 import warnings
+import math
 
 from .knn import TrainKNN
 from .logistic import TrainLogistic
 from .svm import TrainSVM, TrainNSVM, TrainNSVMPoly
 from .ensemble import TrainDecisionTree, TrainRandomForest, TrainGBM
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+plt.style.use('seaborn-whitegrid')
 
 class Judas():
     results = []
@@ -21,35 +26,41 @@ class Judas():
         warnings.filterwarnings("ignore")
         self.models = []
         for model in models:
-            # start_time = time.time()
-            if model[0] == 'knn':
-                print('{}, n neighbors={}'.format(model[0], model[1]))                
-                m = TrainKNN(X,y,model[1], model[2])
-            elif model[0] == 'logistic':
-                print('{}, reg={}'.format(model[0], model[1]))                
-                m = TrainLogistic(X,y, reg=model[1], Number_trials=model[2])
-            elif model[0] == 'svm':
-                print('{}, reg={}'.format(model[0], model[1]))                
-                m = TrainSVM(X,y, reg=model[1], Number_trials=model[2])
-            elif model[0] == 'nsvm-rbf':
-                print('{}'.format(model[0]))                
-                m = TrainNSVM(X,y, Number_trials=model[1])
-            elif model[0] == 'nsvm-poly':
-                print('{}'.format(model[0]))                
-                m = TrainNSVMPoly(X,y, Number_trials=model[1])
-            elif model[0] == 'ensemble-decisiontree':
-                print('{}, max depth={}'.format(model[0], model[2]))                
-                m = TrainDecisionTree(X,y,Number_trials=model[1], maxdepth_settings=model[2])
-            elif model[0] == 'ensemble-randomforest':
-                print('{}, n estimators={}'.format(model[0], model[2]))                
-                m = TrainRandomForest(X,y,Number_trials=model[1], n_estimators_settings=model[2])
-            elif model[0] == 'ensemble-gbm':
-                print('{}, max depth={}'.format(model[0], model[2]))                
-                m = TrainGBM(X,y,Number_trials=model[1], maxdepth_settings=model[2])
+            k = [k for k in model.keys()]
+            if 'scaler' in k:
+                scaler = model['scaler']
+            else:
+                scaler = None
+            if 'trials' not in k:
+                print('Number of Trials required')
+                break;
+            if model['model'] == 'knn':
+                print('{}, n neighbors={}'.format(model['model'], model['k']))
+                n = model['k']
+                m = TrainKNN(X,y,Number_trials=model['trials'], neighbors_settings = n, scaler = scaler)
+            elif model['model'] == 'logistic':
+                print('{}, reg={}'.format(model['model'], model['reg']))                
+                m = TrainLogistic(X,y, reg=model['reg'], Number_trials=model['trials'], scaler = scaler)
+            elif model['model'] == 'svm':
+                print('{}, reg={}'.format(model['model'], model['reg']))                
+                m = TrainSVM(X,y, reg=model['reg'], Number_trials=model['trials'], scaler = scaler)
+            elif model['model'] == 'nsvm-rbf':
+                print('{}'.format(model['model']))                
+                m = TrainNSVM(X,y, Number_trials=model['trials'], scaler = scaler)
+            elif model['model'] == 'nsvm-poly':
+                print('{}'.format(model['model']))                
+                m = TrainNSVMPoly(X,y, Number_trials=model['trials'], scaler = scaler)
+            elif model['model'] == 'ensemble-decisiontree':
+                print('{}, max depth={}'.format(model['model'], model['maxdepth']))                
+                m = TrainDecisionTree(X,y,Number_trials=model['trials'], maxdepth_settings=model['maxdepth'], scaler = scaler)
+            elif model['model'] == 'ensemble-randomforest':
+                print('{}, n estimators={}'.format(model['model'], model['n_est']))                
+                m = TrainRandomForest(X,y,Number_trials=model['trials'], n_estimators_settings=model['n_est'], scaler = scaler)
+            elif model['model'] == 'ensemble-gbm':
+                print('{}, max depth={}'.format(model['model'], model['maxdepth']))                
+                m = TrainGBM(X,y,Number_trials=model['trials'], maxdepth_settings=model['maxdepth'], scaler = scaler)
             else:
                 continue
-            # elapsed_time_secs = time.time() - start_time
-            # print('{} execution time: {}'.format(model[0], timedelta(seconds=round(elapsed_time_secs))))
             self.models.append(m)
 
     def score(self):
@@ -61,3 +72,48 @@ class Judas():
                 print(idx)
             df.loc[idx] = m.result()
         return df
+   
+    def plot_accuracy(self,ax=None):
+        def model_plot(model,ax):
+            ax.plot(model.var, model.sc_train,
+                    label="training accuracy")
+            ax.plot(model.var, model.score, label="test accuracy")
+            ax.fill_between(model.var,
+                            model.sc_train-model.std_train,
+                            model.sc_train+model.std_train, alpha=0.2)
+            ax.fill_between(model.var, 
+                            model.score-model.std_score,
+                            model.score+model.std_score, alpha=0.2)
+            ax.set_ylabel("Accuracy")
+            ax.set_xlabel(model.varname)
+            ax.legend()
+            return ax
+        k = [mod for mod in self.models]
+        klen = len(k)
+        row = int(np.round(np.sqrt(klen),0))
+        col = math.ceil(klen/row)
+        fig, axes = plt.subplots(row,col, figsize=(15, row*5))
+        i = 0
+        if col == 1 and row == 1:
+            ax = model_plot(k[i],axes)
+            ax.set_title(k[i].result()[0])
+            if k[i] != 'KNN':
+                ax.set_xscale('log')
+        elif col == 2 and row == 1:
+            for ax in axes:
+                ax = model_plot(k[i],ax)
+                ax.set_title(k[i].result()[0])
+                if k[i] != 'KNN':
+                    ax.set_xscale('log')
+                i+=1
+        else:
+            for axrow in axes:
+                for ax in axrow:
+                    if i >= len(k):
+                        ax.axis("off")
+                    else:
+                        ax = model_plot(k[i],ax)
+                        ax.set_title(k[i].result()[0])
+                        if k[i] != 'KNN':
+                            ax.set_xscale('log')
+                    i+=1
