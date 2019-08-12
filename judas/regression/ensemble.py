@@ -43,7 +43,6 @@ class TrainDecisionTree():
                 score_test.append(test_accuracy)
                 
         self.score = np.mean(score_test, axis=0) 
-        print(self.score)
         self.sc_train = np.mean(score_train, axis=0)
         self.std_score = np.std(score_test, axis=0)
         self.std_train = np.std(score_train, axis=0)
